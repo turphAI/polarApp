@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API</key>
+	<dict>
+		<key>BaseURL</key>
+		<string>https://api.example.com</string>
+		<key>APIKey</key>
+		<string>YOUR_API_KEY_HERE</string>
+		<key>APISecret</key>
+		<string>YOUR_API_SECRET_HERE</string>
+	</dict>
+	<key>Services</key>
+	<dict>
+		<key>HealthDataAPI</key>
+		<dict>
+			<key>Endpoint</key>
+			<string>/v1/health</string>
+			<key>Token</key>
+			<string>YOUR_HEALTH_API_TOKEN_HERE</string>
+		</dict>
+		<key>AnalyticsAPI</key>
+		<dict>
+			<key>Endpoint</key>
+			<string>/v1/analytics</string>
+			<key>Token</key>
+			<string>YOUR_ANALYTICS_TOKEN_HERE</string>
+		</dict>
+	</dict>
+	<key>Features</key>
+	<dict>
+		<key>EnableDebugMode</key>
+		<false/>
+		<key>EnableMockData</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
