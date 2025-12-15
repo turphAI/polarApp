@@ -17,6 +17,7 @@ class PolarAuthService: NSObject, ObservableObject {
     
     private let config = ConfigurationService.shared
     private var webAuthSession: ASWebAuthenticationSession?
+    private var currentState: String?
     
     // Token storage keys
     private let accessTokenKey = "polar_access_token"
@@ -36,6 +37,8 @@ class PolarAuthService: NSObject, ObservableObject {
         }
         
         let state = UUID().uuidString
+        self.currentState = state
+        
         guard let authURL = config.buildAuthorizationURL(state: state) else {
             throw PolarAuthError.invalidAuthorizationURL
         }
@@ -59,8 +62,20 @@ class PolarAuthService: NSObject, ObservableObject {
                     }
                     
                     guard let callbackURL = callbackURL,
-                          let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-                          let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
+                          let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
+                        continuation.resume(throwing: PolarAuthError.invalidResponse)
+                        return
+                    }
+                    
+                    // Validate state parameter (CSRF protection)
+                    let returnedState = components.queryItems?.first(where: { $0.name == "state" })?.value
+                    guard returnedState == self.currentState else {
+                        continuation.resume(throwing: PolarAuthError.stateMismatch)
+                        return
+                    }
+                    
+                    // Extract authorization code
+                    guard let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
                         continuation.resume(throwing: PolarAuthError.noAuthorizationCode)
                         return
                     }
@@ -97,13 +112,18 @@ class PolarAuthService: NSObject, ObservableObject {
         let base64Credentials = credentialsData.base64EncodedString()
         request.setValue("Basic \(base64Credentials)", forHTTPHeaderField: "Authorization")
         
-        // Create request body
-        let bodyParams = [
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": config.redirectURI
+        // Create request body with proper URL encoding
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "grant_type", value: "authorization_code"),
+            URLQueryItem(name: "code", value: code),
+            URLQueryItem(name: "redirect_uri", value: config.redirectURI)
         ]
-        let bodyString = bodyParams.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+        
+        // URLComponents.query automatically percent-encodes the values
+        guard let bodyString = components.query else {
+            throw PolarAuthError.invalidConfiguration
+        }
         request.httpBody = bodyString.data(using: .utf8)
         
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -124,6 +144,9 @@ class PolarAuthService: NSObject, ObservableObject {
         
         // Register the user with AccessLink
         try await registerUser(accessToken: tokenResponse.accessToken)
+        
+        // Clear the state after successful authentication
+        self.currentState = nil
         
         await MainActor.run {
             self.isAuthenticated = true
@@ -313,6 +336,7 @@ enum PolarAuthError: LocalizedError {
     case invalidURL
     case userCancelled
     case noAuthorizationCode
+    case stateMismatch
     case authenticationFailed(String)
     case tokenExchangeFailed(Int, String)
     case registrationFailed(Int, String)
@@ -333,6 +357,8 @@ enum PolarAuthError: LocalizedError {
             return "Authentication was cancelled"
         case .noAuthorizationCode:
             return "No authorization code received"
+        case .stateMismatch:
+            return "Security validation failed: state parameter mismatch (possible CSRF attack)"
         case .authenticationFailed(let message):
             return "Authentication failed: \(message)"
         case .tokenExchangeFailed(let code, let message):
