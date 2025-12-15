@@ -84,3 +84,9 @@ iOSInjectionProject/
 *.app
 *.ipa
 *.xcarchive
+
+# API Configuration
+# IMPORTANT: Never commit the actual API config file!
+.api-config.plist
+**/api-config.plist
+!api-config.example.plist

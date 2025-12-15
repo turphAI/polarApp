@@ -26,19 +26,23 @@ Polar is a productivity and health monitoring application that helps users track
 
 ```
 polarApp/
-├── Sources/
-│   ├── PolarApp.swift          # Main app entry point
-│   ├── Views/                  # SwiftUI views
-│   │   ├── ContentView.swift
-│   │   ├── DashboardView.swift
-│   │   ├── HealthMetricsView.swift
-│   │   └── SettingsView.swift
-│   ├── Models/                 # Data models
-│   │   └── HealthMetric.swift
-│   ├── ViewModels/            # View models (MVVM)
-│   └── Services/              # Business logic & API services
-├── Resources/                  # Assets, fonts, etc.
-└── Supporting Files/          # Info.plist, etc.
+├── .api-config.plist           # API credentials (git-ignored, create from example)
+├── api-config.example.plist    # Template for API configuration
+├── .gitignore                  # Git ignore rules
+├── README.md                   # This file
+└── polarApp/
+    └── Sources/
+        ├── PolarApp.swift          # Main app entry point
+        ├── Views/                  # SwiftUI views
+        │   ├── ContentView.swift
+        │   ├── DashboardView.swift
+        │   ├── HealthMetricsView.swift
+        │   └── SettingsView.swift
+        ├── Models/                 # Data models
+        │   └── HealthMetric.swift
+        ├── ViewModels/            # View models (MVVM)
+        └── Services/              # Business logic & API services
+            └── ConfigurationService.swift
 ```
 
 ## Setup Instructions
@@ -82,7 +86,36 @@ Add the following privacy descriptions if you plan to integrate HealthKit:
 <string>Polar needs access to update your health data.</string>
 ```
 
-### 5. Build and Run
+### 5. Configure API Credentials
+
+The app uses a `.plist` file to store API credentials securely:
+
+1. Copy the example configuration file:
+   ```bash
+   cp api-config.example.plist .api-config.plist
+   ```
+
+2. Edit `.api-config.plist` and add your actual API credentials:
+   - API Base URL
+   - API Key and Secret
+   - Service-specific tokens
+
+3. **IMPORTANT**: The `.api-config.plist` file is git-ignored and will never be committed. Only the example template is tracked.
+
+4. To use the configuration in your code:
+   ```swift
+   import ConfigurationService
+
+   // Access API credentials
+   let baseURL = ConfigurationService.shared.apiBaseURL
+   let apiKey = ConfigurationService.shared.apiKey
+
+   // Access service-specific settings
+   let healthURL = ConfigurationService.shared.fullURL(for: "HealthDataAPI")
+   let token = ConfigurationService.shared.token(for: "HealthDataAPI")
+   ```
+
+### 6. Build and Run
 
 1. Select a simulator or your device
 2. Press `⌘ + R` to build and run
