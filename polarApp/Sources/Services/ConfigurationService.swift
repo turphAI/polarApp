@@ -188,8 +188,10 @@ class ConfigurationService {
 enum PolarEndpoint: String {
     case users = "Users"
     case pullNotifications = "PullNotifications"
+    case availableData = "AvailableData"
     case exercises = "Exercises"
-    case dailyActivity = "DailyActivity"
+    case activity = "Activity"  // Non-transactional activity API
+    case dailyActivity = "DailyActivity"  // Deprecated transactional API
     case sleep = "Sleep"
     case nightlyRecharge = "NightlyRecharge"
     case continuousHeartRate = "ContinuousHeartRate"
@@ -202,8 +204,12 @@ enum PolarEndpoint: String {
             return "/v3/users"
         case .pullNotifications:
             return "/v3/notifications"
+        case .availableData:
+            return "/v3/users/{user-id}/available-data"
         case .exercises:
             return "/v3/exercises"
+        case .activity:
+            return "/v3/users/{user-id}/activity"
         case .dailyActivity:
             return "/v3/users/{user-id}/activity-transactions"
         case .sleep:

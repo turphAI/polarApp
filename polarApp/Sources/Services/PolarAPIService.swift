@@ -49,8 +49,11 @@ class PolarAPIService {
     
     /// Check for available data (exercises, activity, sleep, etc.)
     func getAvailableData() async throws -> AvailableData {
-        guard let userID = auth.getStoredUserID(),
-              let url = URL(string: config.apiBaseURL + "/v3/users/\(userID)/available-data") else {
+        guard let userID = auth.getStoredUserID() else {
+            throw PolarAPIError.notAuthenticated
+        }
+        
+        guard let url = URL(string: config.fullURL(for: .availableData, userID: userID)) else {
             throw PolarAPIError.invalidURL
         }
         
@@ -85,8 +88,11 @@ class PolarAPIService {
     
     /// Get daily activity summary for past 28 days
     func getDailyActivities() async throws -> [DailyActivity] {
-        guard let userID = auth.getStoredUserID(),
-              let url = URL(string: config.apiBaseURL + "/v3/users/\(userID)/activity") else {
+        guard let userID = auth.getStoredUserID() else {
+            throw PolarAPIError.notAuthenticated
+        }
+        
+        guard let url = URL(string: config.fullURL(for: .activity, userID: userID)) else {
             throw PolarAPIError.invalidURL
         }
         
@@ -105,7 +111,8 @@ class PolarAPIService {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dateString = dateFormatter.string(from: date)
         
-        guard let url = URL(string: config.apiBaseURL + "/v3/users/\(userID)/activity/\(dateString)") else {
+        let baseURL = config.fullURL(for: .activity, userID: userID)
+        guard let url = URL(string: "\(baseURL)/\(dateString)") else {
             throw PolarAPIError.invalidURL
         }
         
@@ -125,7 +132,8 @@ class PolarAPIService {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dateString = dateFormatter.string(from: date)
         
-        guard let url = URL(string: config.apiBaseURL + "/v3/users/\(userID)/continuous-heart-rate/\(dateString)") else {
+        let baseURL = config.fullURL(for: .continuousHeartRate, userID: userID)
+        guard let url = URL(string: "\(baseURL)/\(dateString)") else {
             throw PolarAPIError.invalidURL
         }
         
@@ -137,8 +145,11 @@ class PolarAPIService {
     
     /// Get sleep data for the past 28 nights
     func getSleepData() async throws -> [SleepData] {
-        guard let userID = auth.getStoredUserID(),
-              let url = URL(string: config.apiBaseURL + "/v3/users/\(userID)/sleep") else {
+        guard let userID = auth.getStoredUserID() else {
+            throw PolarAPIError.notAuthenticated
+        }
+        
+        guard let url = URL(string: config.fullURL(for: .sleep, userID: userID)) else {
             throw PolarAPIError.invalidURL
         }
         
@@ -157,7 +168,8 @@ class PolarAPIService {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dateString = dateFormatter.string(from: date)
         
-        guard let url = URL(string: config.apiBaseURL + "/v3/users/\(userID)/sleep/\(dateString)") else {
+        let baseURL = config.fullURL(for: .sleep, userID: userID)
+        guard let url = URL(string: "\(baseURL)/\(dateString)") else {
             throw PolarAPIError.invalidURL
         }
         
@@ -169,8 +181,11 @@ class PolarAPIService {
     
     /// Get nightly recharge data
     func getNightlyRecharge() async throws -> [NightlyRecharge] {
-        guard let userID = auth.getStoredUserID(),
-              let url = URL(string: config.apiBaseURL + "/v3/users/\(userID)/nightly-recharge") else {
+        guard let userID = auth.getStoredUserID() else {
+            throw PolarAPIError.notAuthenticated
+        }
+        
+        guard let url = URL(string: config.fullURL(for: .nightlyRecharge, userID: userID)) else {
             throw PolarAPIError.invalidURL
         }
         
@@ -183,8 +198,11 @@ class PolarAPIService {
     
     /// Get cardio load data
     func getCardioLoad() async throws -> [CardioLoad] {
-        guard let userID = auth.getStoredUserID(),
-              let url = URL(string: config.apiBaseURL + "/v3/users/\(userID)/cardio-load") else {
+        guard let userID = auth.getStoredUserID() else {
+            throw PolarAPIError.notAuthenticated
+        }
+        
+        guard let url = URL(string: config.fullURL(for: .cardioLoad, userID: userID)) else {
             throw PolarAPIError.invalidURL
         }
         
