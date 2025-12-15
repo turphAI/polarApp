@@ -17,7 +17,6 @@ class PolarAuthService: NSObject, ObservableObject {
     
     private let config = ConfigurationService.shared
     private var webAuthSession: ASWebAuthenticationSession?
-    private var currentState: String?
     
     // Token storage keys
     private let accessTokenKey = "polar_access_token"
@@ -37,7 +36,6 @@ class PolarAuthService: NSObject, ObservableObject {
         }
         
         let state = UUID().uuidString
-        self.currentState = state
         
         guard let authURL = config.buildAuthorizationURL(state: state) else {
             throw PolarAuthError.invalidAuthorizationURL
@@ -46,12 +44,20 @@ class PolarAuthService: NSObject, ObservableObject {
         // Perform the web authentication
         let callbackURLScheme = URL(string: config.redirectURI)?.scheme ?? "polarapp"
         
+        // Capture state in closure to prevent race conditions if authorize() is called multiple times
+        let expectedState = state
+        
         let code = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else {
+                    continuation.resume(throwing: PolarAuthError.invalidConfiguration)
+                    return
+                }
+                
                 self.webAuthSession = ASWebAuthenticationSession(
                     url: authURL,
                     callbackURLScheme: callbackURLScheme
-                ) { callbackURL, error in
+                ) { [expectedState] callbackURL, error in
                     if let error = error {
                         if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin {
                             continuation.resume(throwing: PolarAuthError.userCancelled)
@@ -68,8 +74,9 @@ class PolarAuthService: NSObject, ObservableObject {
                     }
                     
                     // Validate state parameter (CSRF protection)
+                    // Uses captured expectedState to prevent race conditions
                     let returnedState = components.queryItems?.first(where: { $0.name == "state" })?.value
-                    guard returnedState == self.currentState else {
+                    guard returnedState == expectedState else {
                         continuation.resume(throwing: PolarAuthError.stateMismatch)
                         return
                     }
@@ -144,9 +151,6 @@ class PolarAuthService: NSObject, ObservableObject {
         
         // Register the user with AccessLink
         try await registerUser(accessToken: tokenResponse.accessToken)
-        
-        // Clear the state after successful authentication
-        self.currentState = nil
         
         await MainActor.run {
             self.isAuthenticated = true
