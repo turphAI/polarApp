@@ -1,6 +1,7 @@
 import Foundation
 
-/// Service to read API configuration from .api-config.plist file
+/// Service to read Polar AccessLink API configuration from .api-config.plist file
+/// Documentation: https://www.polar.com/accesslink-api/
 class ConfigurationService {
     static let shared = ConfigurationService()
 
@@ -12,7 +13,6 @@ class ConfigurationService {
 
     /// Load the configuration from .api-config.plist
     private func loadConfiguration() {
-        // Try to load from the root directory
         let fileManager = FileManager.default
 
         // Get the project root path (assuming the plist is at the root)
@@ -34,60 +34,102 @@ class ConfigurationService {
         }
     }
 
-    // MARK: - API Configuration
+    // MARK: - OAuth2 Configuration (Polar AccessLink)
 
-    /// Base URL for the API
-    var apiBaseURL: String {
-        if let apiDict = config?["API"] as? [String: Any],
-           let baseURL = apiDict["BaseURL"] as? String {
-            return baseURL
-        }
-        return "https://api.example.com"
-    }
-
-    /// API Key
-    var apiKey: String {
-        if let apiDict = config?["API"] as? [String: Any],
-           let key = apiDict["APIKey"] as? String {
-            return key
+    /// OAuth2 Client ID from admin.polaraccesslink.com
+    var clientID: String {
+        if let oauth = config?["OAuth2"] as? [String: Any],
+           let clientID = oauth["ClientID"] as? String {
+            return clientID
         }
         return ""
     }
 
-    /// API Secret
-    var apiSecret: String {
-        if let apiDict = config?["API"] as? [String: Any],
-           let secret = apiDict["APISecret"] as? String {
+    /// OAuth2 Client Secret from admin.polaraccesslink.com
+    var clientSecret: String {
+        if let oauth = config?["OAuth2"] as? [String: Any],
+           let secret = oauth["ClientSecret"] as? String {
             return secret
         }
         return ""
     }
 
-    // MARK: - Service Specific Configuration
-
-    /// Get endpoint for a specific service
-    func endpoint(for service: String) -> String {
-        if let servicesDict = config?["Services"] as? [String: Any],
-           let serviceDict = servicesDict[service] as? [String: Any],
-           let endpoint = serviceDict["Endpoint"] as? String {
-            return endpoint
+    /// OAuth2 Authorization URL (Polar Flow)
+    var authorizationURL: String {
+        if let oauth = config?["OAuth2"] as? [String: Any],
+           let url = oauth["AuthorizationURL"] as? String {
+            return url
         }
-        return ""
+        return "https://flow.polar.com/oauth2/authorization"
     }
 
-    /// Get token for a specific service
-    func token(for service: String) -> String {
-        if let servicesDict = config?["Services"] as? [String: Any],
-           let serviceDict = servicesDict[service] as? [String: Any],
-           let token = serviceDict["Token"] as? String {
-            return token
+    /// OAuth2 Token URL
+    var tokenURL: String {
+        if let oauth = config?["OAuth2"] as? [String: Any],
+           let url = oauth["TokenURL"] as? String {
+            return url
         }
-        return ""
+        return "https://polarremote.com/v2/oauth2/token"
     }
 
-    /// Full URL for a service endpoint
-    func fullURL(for service: String) -> String {
-        return apiBaseURL + endpoint(for: service)
+    /// OAuth2 Redirect URI for your app
+    var redirectURI: String {
+        if let oauth = config?["OAuth2"] as? [String: Any],
+           let uri = oauth["RedirectURI"] as? String {
+            return uri
+        }
+        return "polarapp://callback"
+    }
+
+    /// OAuth2 Scopes
+    var scopes: [String] {
+        if let oauth = config?["OAuth2"] as? [String: Any],
+           let scopes = oauth["Scopes"] as? [String] {
+            return scopes
+        }
+        return ["accesslink.read_all"]
+    }
+
+    // MARK: - API Configuration
+
+    /// Base URL for Polar AccessLink API
+    var apiBaseURL: String {
+        if let apiDict = config?["API"] as? [String: Any],
+           let baseURL = apiDict["BaseURL"] as? String {
+            return baseURL
+        }
+        return "https://www.polaraccesslink.com"
+    }
+
+    /// API Version
+    var apiVersion: String {
+        if let apiDict = config?["API"] as? [String: Any],
+           let version = apiDict["Version"] as? String {
+            return version
+        }
+        return "v3"
+    }
+
+    // MARK: - Endpoint Configuration
+
+    /// Get endpoint path for a specific resource
+    func endpoint(for resource: PolarEndpoint) -> String {
+        if let endpoints = config?["Endpoints"] as? [String: Any],
+           let path = endpoints[resource.rawValue] as? String {
+            return path
+        }
+        return resource.defaultPath
+    }
+
+    /// Full URL for a resource endpoint
+    func fullURL(for resource: PolarEndpoint) -> String {
+        return apiBaseURL + endpoint(for: resource)
+    }
+
+    /// Full URL for a resource endpoint with user ID
+    func fullURL(for resource: PolarEndpoint, userID: String) -> String {
+        let path = endpoint(for: resource).replacingOccurrences(of: "{user-id}", with: userID)
+        return apiBaseURL + path
     }
 
     // MARK: - Feature Flags
@@ -107,49 +149,103 @@ class ConfigurationService {
            let enabled = featuresDict["EnableMockData"] as? Bool {
             return enabled
         }
-        return true // Default to mock data if not configured
+        return false
     }
 
-    // MARK: - Convenience Methods
+    // MARK: - OAuth2 URL Builders
 
-    /// Get a custom value from the config
-    func value<T>(forKeyPath keyPath: String) -> T? {
-        guard let config = config else { return nil }
-
-        let keys = keyPath.components(separatedBy: ".")
-        var current: Any = config
-
-        for key in keys {
-            guard let dict = current as? [String: Any],
-                  let value = dict[key] else {
-                return nil
-            }
-            current = value
+    /// Build the authorization URL for OAuth2 flow
+    func buildAuthorizationURL(state: String? = nil) -> URL? {
+        var components = URLComponents(string: authorizationURL)
+        var queryItems = [
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
+            URLQueryItem(name: "scope", value: scopes.joined(separator: " "))
+        ]
+        
+        if let state = state {
+            queryItems.append(URLQueryItem(name: "state", value: state))
         }
+        
+        components?.queryItems = queryItems
+        return components?.url
+    }
 
-        return current as? T
+    // MARK: - Validation
+
+    /// Check if the configuration is valid
+    var isConfigurationValid: Bool {
+        return !clientID.isEmpty &&
+               !clientSecret.isEmpty &&
+               clientID != "YOUR_CLIENT_ID_HERE" &&
+               clientSecret != "YOUR_CLIENT_SECRET_HERE"
+    }
+}
+
+// MARK: - Polar API Endpoints
+
+enum PolarEndpoint: String {
+    case users = "Users"
+    case pullNotifications = "PullNotifications"
+    case exercises = "Exercises"
+    case dailyActivity = "DailyActivity"
+    case sleep = "Sleep"
+    case nightlyRecharge = "NightlyRecharge"
+    case continuousHeartRate = "ContinuousHeartRate"
+    case cardioLoad = "CardioLoad"
+    case physicalInfo = "PhysicalInfo"
+
+    var defaultPath: String {
+        switch self {
+        case .users:
+            return "/v3/users"
+        case .pullNotifications:
+            return "/v3/notifications"
+        case .exercises:
+            return "/v3/exercises"
+        case .dailyActivity:
+            return "/v3/users/{user-id}/activity-transactions"
+        case .sleep:
+            return "/v3/users/{user-id}/sleep"
+        case .nightlyRecharge:
+            return "/v3/users/{user-id}/nightly-recharge"
+        case .continuousHeartRate:
+            return "/v3/users/{user-id}/continuous-heart-rate"
+        case .cardioLoad:
+            return "/v3/users/{user-id}/cardio-load"
+        case .physicalInfo:
+            return "/v3/users/{user-id}/physical-information-transactions"
+        }
     }
 }
 
 // MARK: - Usage Examples
 
 /*
- Usage:
-
- // Access API credentials
- let baseURL = ConfigurationService.shared.apiBaseURL
- let apiKey = ConfigurationService.shared.apiKey
-
- // Access service-specific configuration
- let healthEndpoint = ConfigurationService.shared.endpoint(for: "HealthDataAPI")
- let healthToken = ConfigurationService.shared.token(for: "HealthDataAPI")
- let fullURL = ConfigurationService.shared.fullURL(for: "HealthDataAPI")
-
- // Check feature flags
- if ConfigurationService.shared.isDebugModeEnabled {
-     print("Debug mode is enabled")
+ Polar AccessLink API Usage:
+ 
+ // 1. Check if configuration is valid
+ guard ConfigurationService.shared.isConfigurationValid else {
+     print("Please configure your API credentials in .api-config.plist")
+     return
  }
-
- // Get custom values
- let customValue: String? = ConfigurationService.shared.value(forKeyPath: "API.BaseURL")
+ 
+ // 2. Get OAuth2 credentials
+ let clientID = ConfigurationService.shared.clientID
+ let clientSecret = ConfigurationService.shared.clientSecret
+ 
+ // 3. Build authorization URL for OAuth2 flow
+ if let authURL = ConfigurationService.shared.buildAuthorizationURL(state: UUID().uuidString) {
+     // Open authURL in browser for user to authorize
+ }
+ 
+ // 4. Get API endpoints
+ let usersURL = ConfigurationService.shared.fullURL(for: .users)
+ let exercisesURL = ConfigurationService.shared.fullURL(for: .exercises)
+ 
+ // 5. Get user-specific endpoints
+ let userID = "123456"
+ let sleepURL = ConfigurationService.shared.fullURL(for: .sleep, userID: userID)
+ let heartRateURL = ConfigurationService.shared.fullURL(for: .continuousHeartRate, userID: userID)
  */
