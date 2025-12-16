@@ -26,11 +26,18 @@ class ConfigurationService {
         if let path = Bundle.main.path(forResource: ".api-config", ofType: "plist"),
            let data = fileManager.contents(atPath: path) {
             config = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+            if config != nil {
+                print("✅ .api-config.plist loaded successfully")
+            }
         }
 
         if config == nil {
             print("⚠️ Warning: .api-config.plist not found. Using default values.")
             print("📝 Please add .api-config.plist to your project with your API credentials.")
+        } else {
+            print("✅ Configuration Service initialized")
+            print("   ClientID: \(clientID.prefix(8))...")
+            print("   AuthURL: \(authorizationURL)")
         }
     }
 

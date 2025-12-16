@@ -30,6 +30,12 @@ class PolarAuthService: NSObject {
             return
         }
 
+        // Debug logging
+        print("🔐 OAuth2 Authorization URL: \(authURL.absoluteString)")
+        print("📋 Client ID: \(config.clientID)")
+        print("🔄 Redirect URI: \(config.redirectURI)")
+        print("🎯 Scopes: \(config.scopes)")
+
         // Capture state in closure to prevent race conditions
         let expectedState = authURL.queryParameters?["state"] ?? ""
 
