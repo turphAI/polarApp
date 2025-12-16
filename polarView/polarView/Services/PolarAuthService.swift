@@ -86,46 +86,85 @@ class PolarAuthService: NSObject {
             return
         }
 
+        print("🔄 Token Exchange Starting...")
+        print("📍 Token URL: \(config.tokenURL)")
+        print("📝 Authorization Code: \(code.prefix(10))...")
+
         var request = URLRequest(url: tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        // Use URLComponents to properly URL-encode form parameters
+        // Polar AccessLink requires Basic Authentication for token exchange
+        let credentials = "\(config.clientID):\(config.clientSecret)"
+        if let credentialsData = credentials.data(using: .utf8) {
+            let base64Credentials = credentialsData.base64EncodedString()
+            request.setValue("Basic \(base64Credentials)", forHTTPHeaderField: "Authorization")
+            print("🔑 Using Basic Auth")
+        }
+
+        // Body only needs grant_type, code, and redirect_uri
         var components = URLComponents()
         components.queryItems = [
             URLQueryItem(name: "grant_type", value: "authorization_code"),
             URLQueryItem(name: "code", value: code),
-            URLQueryItem(name: "client_id", value: config.clientID),
-            URLQueryItem(name: "client_secret", value: config.clientSecret),
             URLQueryItem(name: "redirect_uri", value: config.redirectURI)
         ]
 
         // Encode as form data
         if let query = components.percentEncodedQuery {
             request.httpBody = query.data(using: .utf8)
+            print("📦 Request Body: \(query)")
         }
 
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {
-                print("Token exchange error: \(error.localizedDescription)")
+                print("❌ Token exchange network error: \(error.localizedDescription)")
                 completion(.failure(.tokenExchangeFailed))
                 return
             }
 
+            // Log HTTP response status
+            if let httpResponse = response as? HTTPURLResponse {
+                print("📊 Token Response Status: \(httpResponse.statusCode)")
+            }
+
             guard let data = data else {
+                print("❌ No data received from token endpoint")
                 completion(.failure(.invalidResponse))
                 return
             }
 
+            // Log raw response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("📨 Token Response: \(responseString)")
+            }
+
             do {
                 let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                
+                // Check for error response
+                if let errorMsg = json?["error"] as? String {
+                    print("❌ OAuth Error: \(errorMsg)")
+                    if let errorDescription = json?["error_description"] as? String {
+                        print("   Description: \(errorDescription)")
+                    }
+                    completion(.failure(.tokenExchangeFailed))
+                    return
+                }
+                
                 if let accessToken = json?["access_token"] as? String {
+                    print("✅ Access token received!")
+                    if let userID = json?["x_user_id"] as? Int {
+                        print("👤 User ID: \(userID)")
+                    }
                     completion(.success(accessToken))
                 } else {
+                    print("❌ No access_token in response")
                     completion(.failure(.invalidResponse))
                 }
             } catch {
-                print("JSON parsing error: \(error.localizedDescription)")
+                print("❌ JSON parsing error: \(error.localizedDescription)")
                 completion(.failure(.invalidResponse))
             }
         }

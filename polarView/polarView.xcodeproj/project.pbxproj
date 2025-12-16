@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2044CCB62EF1959C009C4968 /* .api-config.plist in Resources */ = {isa = PBXBuildFile; fileRef = 2044CCB52EF1959C009C4968 /* .api-config.plist */; };
+		2044CCB72EF1959C009C4968 /* .api-config.plist in Resources */ = {isa = PBXBuildFile; fileRef = 2044CCB52EF1959C009C4968 /* .api-config.plist */; };
+		2044CCB82EF1959C009C4968 /* .api-config.plist in Resources */ = {isa = PBXBuildFile; fileRef = 2044CCB52EF1959C009C4968 /* .api-config.plist */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		2044CC822EF17E04009C4968 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +33,7 @@
 		2044CC722EF17E03009C4968 /* polarView.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = polarView.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2044CC812EF17E04009C4968 /* polarViewTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = polarViewTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2044CC8B2EF17E04009C4968 /* polarViewUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = polarViewUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2044CCB52EF1959C009C4968 /* .api-config.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = ".api-config.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -92,6 +99,7 @@
 				2044CC842EF17E04009C4968 /* polarViewTests */,
 				2044CC8E2EF17E04009C4968 /* polarViewUITests */,
 				2044CC732EF17E03009C4968 /* Products */,
+				2044CCB52EF1959C009C4968 /* .api-config.plist */,
 			);
 			sourceTree = "<group>";
 		};
@@ -225,6 +233,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2044CCB82EF1959C009C4968 /* .api-config.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -232,6 +241,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2044CCB62EF1959C009C4968 /* .api-config.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -239,6 +249,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2044CCB72EF1959C009C4968 /* .api-config.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
