@@ -8,6 +8,12 @@
 import Foundation
 import AuthenticationServices
 
+/// Result of successful authentication
+struct AuthResult {
+    let accessToken: String
+    let userID: Int
+}
+
 class PolarAuthService: NSObject {
     static let shared = PolarAuthService()
 
@@ -19,12 +25,13 @@ class PolarAuthService: NSObject {
         case noAuthorizationCode
         case tokenExchangeFailed
         case invalidResponse
+        case missingUserID
     }
 
     // MARK: - OAuth2 Flow
 
     /// Initiates OAuth2 authorization flow
-    func authorize(presentationAnchor: ASPresentationAnchor, completion: @escaping (Result<String, PolarAuthError>) -> Void) {
+    func authorize(presentationAnchor: ASPresentationAnchor, completion: @escaping (Result<AuthResult, PolarAuthError>) -> Void) {
         guard let authURL = config.buildAuthorizationURL(state: UUID().uuidString) else {
             completion(.failure(.invalidURL))
             return
@@ -80,7 +87,7 @@ class PolarAuthService: NSObject {
     }
 
     /// Exchanges authorization code for access token
-    private func exchangeCodeForToken(code: String, completion: @escaping (Result<String, PolarAuthError>) -> Void) {
+    private func exchangeCodeForToken(code: String, completion: @escaping (Result<AuthResult, PolarAuthError>) -> Void) {
         guard let tokenURL = URL(string: config.tokenURL) else {
             completion(.failure(.invalidURL))
             return
@@ -153,12 +160,15 @@ class PolarAuthService: NSObject {
                     return
                 }
                 
-                if let accessToken = json?["access_token"] as? String {
+                if let accessToken = json?["access_token"] as? String,
+                   let userID = json?["x_user_id"] as? Int {
                     print("✅ Access token received!")
-                    if let userID = json?["x_user_id"] as? Int {
-                        print("👤 User ID: \(userID)")
-                    }
-                    completion(.success(accessToken))
+                    print("👤 User ID: \(userID)")
+                    let result = AuthResult(accessToken: accessToken, userID: userID)
+                    completion(.success(result))
+                } else if json?["access_token"] != nil {
+                    print("❌ No x_user_id in response")
+                    completion(.failure(.missingUserID))
                 } else {
                     print("❌ No access_token in response")
                     completion(.failure(.invalidResponse))

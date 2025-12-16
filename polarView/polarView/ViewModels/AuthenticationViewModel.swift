@@ -13,6 +13,7 @@ class AuthenticationViewModel: NSObject, ObservableObject {
     @Published var isAuthenticating = false
     @Published var authError: String?
     @Published var authToken: String?
+    @Published var userID: Int?
 
     private let authService = PolarAuthService.shared
     private let oauthHandler: OAuthCallbackHandler
@@ -24,6 +25,7 @@ class AuthenticationViewModel: NSObject, ObservableObject {
         // Sync with OAuth handler state
         self.isAuthenticated = oauthHandler.isAuthenticated
         self.authToken = oauthHandler.authToken
+        self.userID = oauthHandler.userID
 
         // Observe changes from OAuth handler
         oauthHandler.objectWillChange
@@ -31,6 +33,7 @@ class AuthenticationViewModel: NSObject, ObservableObject {
                 DispatchQueue.main.async {
                     self?.isAuthenticated = oauthHandler.isAuthenticated
                     self?.authToken = oauthHandler.authToken
+                    self?.userID = oauthHandler.userID
                     self?.authError = oauthHandler.authError
                     self?.isAuthenticating = oauthHandler.isAuthenticating
                 }
@@ -52,10 +55,11 @@ class AuthenticationViewModel: NSObject, ObservableObject {
                 self?.isAuthenticating = false
 
                 switch result {
-                case .success(let token):
+                case .success(let authResult):
                     print("✅ Authentication successful")
-                    self?.authToken = token
-                    self?.oauthHandler.authToken = token
+                    self?.authToken = authResult.accessToken
+                    self?.userID = authResult.userID
+                    self?.oauthHandler.setCredentials(token: authResult.accessToken, userID: authResult.userID)
                     self?.isAuthenticated = true
 
                 case .failure(let error):
@@ -90,6 +94,8 @@ class AuthenticationViewModel: NSObject, ObservableObject {
             return "Token exchange failed. Please try again."
         case .invalidResponse:
             return "Invalid server response"
+        case .missingUserID:
+            return "User ID not received from Polar"
         }
     }
 }
