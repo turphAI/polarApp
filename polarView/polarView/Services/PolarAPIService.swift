@@ -84,7 +84,7 @@ class PolarAPIService {
             print("ℹ️ User already registered")
             // Return a minimal user object
             return PolarUser(
-                polarUserId: "\(userID)",
+                polarUserId: userID,
                 memberID: "user-\(userID)",
                 registrationDate: nil,
                 firstName: nil,
@@ -108,7 +108,8 @@ class PolarAPIService {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dateString = dateFormatter.string(from: date)
         
-        let url = URL(string: "\(baseURL)/v3/users/continuous-heart-rate/\(dateString)")!
+        // Endpoint: /v3/users/{user-id}/continuous-heart-rate/{date}
+        let url = URL(string: "\(baseURL)/v3/users/\(userID)/continuous-heart-rate/\(dateString)")!
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"

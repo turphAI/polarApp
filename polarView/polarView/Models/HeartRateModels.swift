@@ -11,7 +11,7 @@ import Foundation
 
 /// User registration response from Polar API
 struct PolarUser: Codable {
-    let polarUserId: String
+    let polarUserId: Int  // API returns this as a number
     let memberID: String?
     let registrationDate: String?
     let firstName: String?
