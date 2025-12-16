@@ -108,8 +108,9 @@ class PolarAPIService {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dateString = dateFormatter.string(from: date)
         
-        // Endpoint: /v3/users/{user-id}/continuous-heart-rate/{date}
-        let url = URL(string: "\(baseURL)/v3/users/\(userID)/continuous-heart-rate/\(dateString)")!
+        // Endpoint: /v3/users/continuous-heart-rate/{date}
+        // User is identified by bearer token, not in URL path
+        let url = URL(string: "\(baseURL)/v3/users/continuous-heart-rate/\(dateString)")!
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -117,6 +118,7 @@ class PolarAPIService {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         
         print("❤️ Fetching heart rate for \(dateString)...")
+        print("🔗 URL: \(url.absoluteString)")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
