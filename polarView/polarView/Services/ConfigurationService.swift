@@ -1,3 +1,10 @@
+//
+//  ConfigurationService.swift
+//  polarView
+//
+//  Created by Tom Murphy on 12/16/25.
+//
+
 import Foundation
 
 /// Service to read Polar AccessLink API configuration from .api-config.plist file
@@ -15,22 +22,15 @@ class ConfigurationService {
     private func loadConfiguration() {
         let fileManager = FileManager.default
 
-        // Get the project root path (assuming the plist is at the root)
-        if let projectPath = Bundle.main.resourcePath?.replacingOccurrences(of: "/build/", with: "/"),
-           let configPath = fileManager.contents(atPath: projectPath + "/.api-config.plist") {
-            config = try? PropertyListSerialization.propertyList(from: configPath, format: nil) as? [String: Any]
-        }
-
-        // Alternative: Try to load from bundle resources if added to Xcode project
-        if config == nil,
-           let path = Bundle.main.path(forResource: ".api-config", ofType: "plist"),
+        // Try to load from bundle resources if added to Xcode project
+        if let path = Bundle.main.path(forResource: ".api-config", ofType: "plist"),
            let data = fileManager.contents(atPath: path) {
             config = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
         }
 
         if config == nil {
             print("⚠️ Warning: .api-config.plist not found. Using default values.")
-            print("📝 Please copy api-config.example.plist to .api-config.plist and fill in your API credentials.")
+            print("📝 Please add .api-config.plist to your project with your API credentials.")
         }
     }
 
@@ -132,26 +132,6 @@ class ConfigurationService {
         return apiBaseURL + path
     }
 
-    // MARK: - Feature Flags
-
-    /// Check if debug mode is enabled
-    var isDebugModeEnabled: Bool {
-        if let featuresDict = config?["Features"] as? [String: Any],
-           let enabled = featuresDict["EnableDebugMode"] as? Bool {
-            return enabled
-        }
-        return false
-    }
-
-    /// Check if mock data is enabled
-    var isMockDataEnabled: Bool {
-        if let featuresDict = config?["Features"] as? [String: Any],
-           let enabled = featuresDict["EnableMockData"] as? Bool {
-            return enabled
-        }
-        return false
-    }
-
     // MARK: - OAuth2 URL Builders
 
     /// Build the authorization URL for OAuth2 flow
@@ -190,8 +170,8 @@ enum PolarEndpoint: String {
     case pullNotifications = "PullNotifications"
     case availableData = "AvailableData"
     case exercises = "Exercises"
-    case activity = "Activity"  // Non-transactional activity API
-    case dailyActivity = "DailyActivity"  // Deprecated transactional API
+    case activity = "Activity"
+    case dailyActivity = "DailyActivity"
     case sleep = "Sleep"
     case nightlyRecharge = "NightlyRecharge"
     case continuousHeartRate = "ContinuousHeartRate"
@@ -226,32 +206,3 @@ enum PolarEndpoint: String {
     }
 }
 
-// MARK: - Usage Examples
-
-/*
- Polar AccessLink API Usage:
- 
- // 1. Check if configuration is valid
- guard ConfigurationService.shared.isConfigurationValid else {
-     print("Please configure your API credentials in .api-config.plist")
-     return
- }
- 
- // 2. Get OAuth2 credentials
- let clientID = ConfigurationService.shared.clientID
- let clientSecret = ConfigurationService.shared.clientSecret
- 
- // 3. Build authorization URL for OAuth2 flow
- if let authURL = ConfigurationService.shared.buildAuthorizationURL(state: UUID().uuidString) {
-     // Open authURL in browser for user to authorize
- }
- 
- // 4. Get API endpoints
- let usersURL = ConfigurationService.shared.fullURL(for: .users)
- let exercisesURL = ConfigurationService.shared.fullURL(for: .exercises)
- 
- // 5. Get user-specific endpoints
- let userID = "123456"
- let sleepURL = ConfigurationService.shared.fullURL(for: .sleep, userID: userID)
- let heartRateURL = ConfigurationService.shared.fullURL(for: .continuousHeartRate, userID: userID)
- */
