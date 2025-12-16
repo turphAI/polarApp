@@ -6,9 +6,11 @@
 //
 
 import Foundation
+import Combine
+import Security
 
-/// Handles OAuth2 callback deep links and manages token storage
-class OAuthCallbackHandler: ObservableObject {
+@MainActor
+final class OAuthCallbackHandler: ObservableObject {
     @Published var authToken: String? {
         didSet {
             if let token = authToken {
@@ -32,28 +34,21 @@ class OAuthCallbackHandler: ObservableObject {
 
     /// Handle OAuth callback from deep link
     func handle(url: URL) {
-        print("🔗 Deep link received: \(url)")
-
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
             authError = "Invalid callback URL"
             return
         }
 
-        // Check for error response
         if let error = components.queryItems?.first(where: { $0.name == "error" })?.value {
             authError = "Authorization failed: \(error)"
-            print("❌ OAuth error: \(error)")
             return
         }
 
-        // Note: The actual token exchange happens in PolarAuthService
-        // This handler is here for future enhanced deep link handling
-        print("✅ Callback processed successfully")
+        // You can parse code/state here if needed and kick off token exchange
     }
 
     // MARK: - Token Storage (Keychain)
 
-    /// Save token to Keychain
     private func saveToken(_ token: String) {
         let data = token.data(using: .utf8)!
 
@@ -64,15 +59,10 @@ class OAuthCallbackHandler: ObservableObject {
             kSecValueData as String: data
         ]
 
-        // Delete existing token first
         SecItemDelete(query as CFDictionary)
-
-        // Add new token
         SecItemAdd(query as CFDictionary, nil)
-        print("✅ Token saved to Keychain")
     }
 
-    /// Load token from Keychain
     private func loadToken() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -87,14 +77,12 @@ class OAuthCallbackHandler: ObservableObject {
         if status == errSecSuccess,
            let data = result as? Data,
            let token = String(data: data, encoding: .utf8) {
-            print("✅ Token loaded from Keychain")
             return token
         }
 
         return nil
     }
 
-    /// Clear token from Keychain
     private func clearToken() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -103,18 +91,14 @@ class OAuthCallbackHandler: ObservableObject {
         ]
 
         SecItemDelete(query as CFDictionary)
-        print("✅ Token cleared from Keychain")
     }
 
-    /// Sign out and clear authentication
     func signOut() {
         authToken = nil
         authError = nil
         isAuthenticating = false
-        print("👋 User signed out")
     }
 
-    /// Check if user is authenticated
     var isAuthenticated: Bool {
         authToken != nil
     }
