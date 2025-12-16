@@ -12,6 +12,7 @@ struct DashboardView: View {
     
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var noDataAvailable = false  // True when API returns no data (not an error)
     @State private var heartRateSummary: HeartRateSummary?
     @State private var lastHeartRate: Int?
     @State private var lastSyncTime: Date?
@@ -36,8 +37,27 @@ struct DashboardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
                     
-                    // Error Banner
-                    if let error = errorMessage {
+                    // Info/Error Banner
+                    if noDataAvailable {
+                        // No data available - informational message
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                                Text("No heart rate data yet")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
+                            Text("Sync your Polar watch with the Polar Flow app to see your heart rate data here.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                        .padding(.horizontal)
+                    } else if let error = errorMessage {
+                        // Actual error
                         HStack {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(.orange)
@@ -208,6 +228,7 @@ struct DashboardView: View {
         
         isLoading = true
         errorMessage = nil
+        noDataAvailable = false
         
         do {
             let summary = try await apiService.getTodayHeartRateSummary(token: token, userID: userID)
@@ -217,12 +238,7 @@ struct DashboardView: View {
                 self.lastHeartRate = summary?.samples.last?.heartRate
                 self.lastSyncTime = Date()
                 self.isLoading = false
-            }
-            
-            if summary == nil {
-                await MainActor.run {
-                    self.errorMessage = "No heart rate data available yet. Sync your watch with Polar Flow first."
-                }
+                self.noDataAvailable = (summary == nil)
             }
         } catch {
             await MainActor.run {

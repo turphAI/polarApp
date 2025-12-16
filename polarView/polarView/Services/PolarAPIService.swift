@@ -135,9 +135,9 @@ class PolarAPIService {
             
             let hrData = try JSONDecoder().decode(ContinuousHeartRate.self, from: data)
             return hrData
-        } else if httpResponse.statusCode == 204 {
-            // No data available for this date
-            print("ℹ️ No heart rate data for \(dateString)")
+        } else if httpResponse.statusCode == 204 || httpResponse.statusCode == 404 {
+            // 204 = No content, 404 = No data found for date (both mean no data available)
+            print("ℹ️ No heart rate data available for \(dateString)")
             return nil
         } else if httpResponse.statusCode == 401 {
             throw APIError.notAuthenticated
