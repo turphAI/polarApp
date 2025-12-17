@@ -215,8 +215,64 @@ struct DashboardView: View {
             isUserRegistered = true
         }
         
-        // Step 2: Fetch heart rate data
+        // Step 2: Check what data is available (debug)
+        await checkAvailableData()
+        
+        // Step 3: Fetch heart rate data (try today and last few days)
         await fetchHeartRateData()
+    }
+    
+    /// Debug function to check what data is available via the API
+    private func checkAvailableData() async {
+        guard let token = viewModel.authToken,
+              let userID = viewModel.userID else { return }
+        
+        print("\n" + String(repeating: "=", count: 50))
+        print("🔍 CHECKING AVAILABLE DATA")
+        print(String(repeating: "=", count: 50))
+        
+        // Check notifications/available data
+        do {
+            let available = try await apiService.getAvailableData(token: token)
+            if let resources = available.availableData {
+                print("📦 Available resources: \(resources.count)")
+                for resource in resources {
+                    print("   - \(resource.resourceType): \(resource.url ?? "no url")")
+                }
+            } else {
+                print("📭 No pending data notifications")
+            }
+        } catch {
+            print("⚠️ Could not check available data: \(error)")
+        }
+        
+        // Try fetching heart rate for the last 7 days to find any data
+        print("\n🔍 Checking heart rate data for last 7 days...")
+        let calendar = Calendar.current
+        
+        for daysAgo in 0..<7 {
+            guard let date = calendar.date(byAdding: .day, value: -daysAgo, to: Date()) else { continue }
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            let dateStr = formatter.string(from: date)
+            
+            do {
+                let hrData = try await apiService.getContinuousHeartRate(token: token, userID: userID, date: date)
+                if let samples = hrData?.samples, !samples.isEmpty {
+                    print("✅ \(dateStr): Found \(samples.count) heart rate samples!")
+                    if let first = samples.first, let last = samples.last {
+                        print("   First: \(first.heartRate) bpm at \(first.sampleTime)")
+                        print("   Last: \(last.heartRate) bpm at \(last.sampleTime)")
+                    }
+                } else {
+                    print("📭 \(dateStr): No data")
+                }
+            } catch {
+                print("📭 \(dateStr): No data")
+            }
+        }
+        
+        print(String(repeating: "=", count: 50) + "\n")
     }
     
     private func fetchHeartRateData() async {
