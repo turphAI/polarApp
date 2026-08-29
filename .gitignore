@@ -20,6 +20,15 @@ node_modules/
 .env
 .env.local
 
+# polarWatch PWA (backend/frontend)
+backend/.venv/
+backend/__pycache__/
+frontend/dist/
+static/
+data/*
+!data/secrets.env.example
+*.log
+
 # Xcode
 xcuserdata/
 *.xcscmblueprint
