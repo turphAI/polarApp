@@ -36,6 +36,33 @@ CREATE TABLE IF NOT EXISTS sync_log (
     ok INTEGER NOT NULL,
     detail TEXT
 );
+
+CREATE TABLE IF NOT EXISTS strava_token (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    expires_at REAL NOT NULL,     -- unix timestamp (Strava gives this directly)
+    athlete_id TEXT,
+    connected_at REAL NOT NULL
+);
+
+-- One row per Strava activity. Strava is the start/stop log; heart rate
+-- (hr_*) is filled in separately by slicing Polar's continuous-samples to
+-- this activity's time window — null until that match has been attempted.
+CREATE TABLE IF NOT EXISTS activities (
+    strava_id INTEGER PRIMARY KEY,
+    name TEXT,
+    sport_type TEXT,
+    start_date_utc TEXT NOT NULL,      -- ISO 8601, as Strava gives it
+    elapsed_time_sec INTEGER NOT NULL,
+    distance_m REAL,
+    hr_high INTEGER,
+    hr_low INTEGER,
+    hr_avg INTEGER,
+    hr_sample_count INTEGER,
+    hr_matched_at REAL,                -- set once a match has been attempted (even if it found nothing)
+    synced_at REAL NOT NULL
+);
 """
 
 
@@ -138,3 +165,77 @@ def get_last_sync():
     with connect() as conn:
         row = conn.execute("SELECT * FROM sync_log ORDER BY ran_at DESC LIMIT 1").fetchone()
         return dict(row) if row else None
+
+
+# --- strava_token ------------------------------------------------------
+
+def save_strava_token(access_token, refresh_token, expires_at, athlete_id=None):
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO strava_token (id, access_token, refresh_token, expires_at, athlete_id, connected_at)
+            VALUES (1, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                access_token = excluded.access_token,
+                refresh_token = excluded.refresh_token,
+                expires_at = excluded.expires_at,
+                athlete_id = COALESCE(excluded.athlete_id, strava_token.athlete_id)
+            """,
+            (access_token, refresh_token, expires_at, athlete_id, time.time()),
+        )
+
+
+def get_strava_token():
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM strava_token WHERE id = 1").fetchone()
+        return dict(row) if row else None
+
+
+# --- activities --------------------------------------------------------
+
+def upsert_activity(strava_id, name, sport_type, start_date_utc, elapsed_time_sec, distance_m):
+    """Insert a newly-seen activity, or update its Strava-side fields without
+    touching any hr_* match data that's already been computed for it."""
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO activities
+                (strava_id, name, sport_type, start_date_utc, elapsed_time_sec, distance_m, synced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(strava_id) DO UPDATE SET
+                name = excluded.name, sport_type = excluded.sport_type,
+                start_date_utc = excluded.start_date_utc,
+                elapsed_time_sec = excluded.elapsed_time_sec, distance_m = excluded.distance_m,
+                synced_at = excluded.synced_at
+            """,
+            (strava_id, name, sport_type, start_date_utc, elapsed_time_sec, distance_m, time.time()),
+        )
+
+
+def update_activity_hr(strava_id, high, low, avg, sample_count):
+    with connect() as conn:
+        conn.execute(
+            """
+            UPDATE activities
+            SET hr_high = ?, hr_low = ?, hr_avg = ?, hr_sample_count = ?, hr_matched_at = ?
+            WHERE strava_id = ?
+            """,
+            (high, low, avg, sample_count, time.time(), strava_id),
+        )
+
+
+def get_unmatched_activities():
+    """Activities whose HR match hasn't been attempted yet."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM activities WHERE hr_matched_at IS NULL ORDER BY start_date_utc"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_activities(limit=50):
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM activities ORDER BY start_date_utc DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]

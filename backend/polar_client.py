@@ -9,7 +9,8 @@ story of how that mismatch was found.
 """
 import base64
 import time
-from datetime import date as date_cls, timedelta
+from datetime import date as date_cls, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -99,11 +100,16 @@ def get_valid_access_token():
     return token["access_token"]
 
 
-def get_daily_summary(for_date: date_cls):
-    """Fetch one day's continuous heart-rate samples and summarize them.
+def get_samples_with_local_time(for_date: date_cls):
+    """Fetch one day's raw continuous heart-rate samples, each tagged with a
+    real local datetime (not just Polar's offsetMillis-since-midnight).
 
-    Returns (high, low, avg, latest, sample_count) or None if Polar has no
-    data for that date (e.g. watch hasn't synced yet that day).
+    Returns a list of {"heart_rate": int, "local_dt": datetime} sorted by
+    time, or [] if Polar has no data for that date.
+
+    Shared by get_daily_summary() (whole-day stats) and the Strava-activity
+    matcher (slices this same list down to one workout's window) — one HTTP
+    call and one parse, reused both ways.
     """
     access_token = get_valid_access_token()
     from_str = for_date.isoformat()
@@ -119,7 +125,7 @@ def get_daily_summary(for_date: date_cls):
     if resp.status_code == 401:
         raise PolarAuthError(f"Polar rejected the access token (401): {resp.text[:300]}")
     if resp.status_code == 404:
-        return None
+        return []
     if resp.status_code != 200:
         raise PolarAPIError(f"continuous-samples returned {resp.status_code}: {resp.text[:300]}")
 
@@ -128,22 +134,38 @@ def get_daily_summary(for_date: date_cls):
     # is top-level, NOT wrapped in a "continuousSamples" envelope — earlier docs
     # summarized it wrong. See CLAUDE.md "Polar API gotchas".
     days = body.get("heartRateSamplesPerDay") or []
-    all_samples = []
+    raw = []
     for day_entry in days:
         if day_entry.get("date") != from_str:
             continue
-        all_samples.extend(day_entry.get("samples") or [])
+        raw.extend(day_entry.get("samples") or [])
 
-    if not all_samples:
+    # WORKING ASSUMPTION, not yet verified against a real matched activity
+    # (see CLAUDE.md): offsetMillis is milliseconds since LOCAL midnight of
+    # `for_date`, in config.LOCAL_TZ. If a real Strava-matched workout later
+    # shows the HR window is off by a fixed amount, this is the line to fix.
+    midnight_local = datetime.combine(for_date, datetime.min.time(), tzinfo=ZoneInfo(config.LOCAL_TZ))
+    samples = [
+        {
+            "heart_rate": s["heartRate"],
+            "local_dt": midnight_local + timedelta(milliseconds=s.get("offsetMillis", 0)),
+        }
+        for s in raw
+        if "heartRate" in s
+    ]
+    samples.sort(key=lambda s: s["local_dt"])
+    return samples
+
+
+def get_daily_summary(for_date: date_cls):
+    """Whole-day high/low/avg/latest, or None if there's no data for that date."""
+    samples = get_samples_with_local_time(for_date)
+    if not samples:
         return None
 
-    all_samples.sort(key=lambda s: s.get("offsetMillis", 0))
-    values = [s["heartRate"] for s in all_samples if "heartRate" in s]
-    if not values:
-        return None
-
+    values = [s["heart_rate"] for s in samples]
     high = max(values)
     low = min(values)
     avg = round(sum(values) / len(values))
-    latest = all_samples[-1]["heartRate"]
+    latest = samples[-1]["heart_rate"]
     return high, low, avg, latest, len(values)

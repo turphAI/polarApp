@@ -40,3 +40,22 @@ TREND_PRIOR_DAYS = 7
 # A day-over-day resting-average delta smaller than this (bpm) reads as
 # "Stable" rather than up/down — avoids noise reading as a trend.
 TREND_STABLE_THRESHOLD_BPM = 2
+
+# Used to convert Polar's continuous-samples offsetMillis (working assumption:
+# milliseconds since LOCAL midnight of the sample's `date`, unverified against
+# docs — see CLAUDE.md) into real timestamps comparable against Strava's UTC
+# activity start times, for matching an activity to its heart-rate window.
+LOCAL_TZ = os.environ.get("POLARWATCH_TZ", "America/New_York")
+
+# --- Strava (activity source of truth — start/stop tracked there, not on the
+# watch; see CLAUDE.md "Why Strava" for why this exists) ---------------------
+STRAVA_AUTH_URL = "https://www.strava.com/oauth/authorize"
+STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
+STRAVA_API_BASE = "https://www.strava.com/api/v3"
+STRAVA_SCOPE = "activity:read_all"
+
+STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID", "")
+STRAVA_CLIENT_SECRET = os.environ.get("STRAVA_CLIENT_SECRET", "")
+STRAVA_REDIRECT_URI = os.environ.get(
+    "STRAVA_REDIRECT_URI", "http://127.0.0.1:5057/api/strava/auth/callback"
+)
