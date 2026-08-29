@@ -13,6 +13,13 @@ Supersedes an earlier native-iOS attempt at `polarView/` (SwiftUI, abandoned
 — left in place, not deleted, for history). That attempt stalled on the Polar
 API mismatch documented below and never got past placeholder UI.
 
+**Read [docs/product/progression-methodology.md](docs/product/progression-methodology.md)
+before touching the Progression view or trusting a cross-session trend** —
+it documents what's actually being measured, the real confounds (mixed
+sport types, e-bike assist, no weather data) that aren't controlled for
+yet, and why the per-session Activity Detail chart is the more trustworthy
+view of the two.
+
 ## Architecture
 
 - **Backend**: Flask (`backend/`), SQLite (`data/polarwatch.db`, gitignored).

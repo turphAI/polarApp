@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS activities (
     start_date_utc TEXT NOT NULL,      -- ISO 8601, as Strava gives it
     elapsed_time_sec INTEGER NOT NULL,
     distance_m REAL,
+    elevation_gain_m REAL,
     hr_high INTEGER,
     hr_low INTEGER,
     hr_avg INTEGER,
@@ -70,6 +71,16 @@ def init_db():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
+
+
+def _migrate(conn):
+    """CREATE TABLE IF NOT EXISTS doesn't add columns to an existing table —
+    this covers the mini's already-live database. Idempotent; safe to run
+    on every startup."""
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(activities)")}
+    if "elevation_gain_m" not in existing:
+        conn.execute("ALTER TABLE activities ADD COLUMN elevation_gain_m REAL")
 
 
 @contextmanager
@@ -193,23 +204,33 @@ def get_strava_token():
 
 # --- activities --------------------------------------------------------
 
-def upsert_activity(strava_id, name, sport_type, start_date_utc, elapsed_time_sec, distance_m):
+def upsert_activity(strava_id, name, sport_type, start_date_utc, elapsed_time_sec, distance_m,
+                     elevation_gain_m=None):
     """Insert a newly-seen activity, or update its Strava-side fields without
     touching any hr_* match data that's already been computed for it."""
     with connect() as conn:
         conn.execute(
             """
             INSERT INTO activities
-                (strava_id, name, sport_type, start_date_utc, elapsed_time_sec, distance_m, synced_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (strava_id, name, sport_type, start_date_utc, elapsed_time_sec, distance_m,
+                 elevation_gain_m, synced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(strava_id) DO UPDATE SET
                 name = excluded.name, sport_type = excluded.sport_type,
                 start_date_utc = excluded.start_date_utc,
                 elapsed_time_sec = excluded.elapsed_time_sec, distance_m = excluded.distance_m,
+                elevation_gain_m = excluded.elevation_gain_m,
                 synced_at = excluded.synced_at
             """,
-            (strava_id, name, sport_type, start_date_utc, elapsed_time_sec, distance_m, time.time()),
+            (strava_id, name, sport_type, start_date_utc, elapsed_time_sec, distance_m,
+             elevation_gain_m, time.time()),
         )
+
+
+def get_activity(strava_id):
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM activities WHERE strava_id = ?", (strava_id,)).fetchone()
+        return dict(row) if row else None
 
 
 def update_activity_hr(strava_id, high, low, avg, sample_count):
@@ -233,9 +254,15 @@ def get_unmatched_activities():
         return [dict(r) for r in rows]
 
 
-def get_activities(limit=50):
+def get_activities(limit=50, matched_only=True):
+    """By design (per user, 2026-08-29): a Strava activity with no Polar
+    heart-rate coverage doesn't surface in the app at all — not shown with
+    a placeholder. There's no guarantee every Strava session has a Polar
+    match (predates wearing the watch, watch not synced yet, etc.), so this
+    filter is the normal case, not an edge case."""
     with connect() as conn:
+        where = "WHERE hr_avg IS NOT NULL " if matched_only else ""
         rows = conn.execute(
-            "SELECT * FROM activities ORDER BY start_date_utc DESC LIMIT ?", (limit,)
+            f"SELECT * FROM activities {where}ORDER BY start_date_utc DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]

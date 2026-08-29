@@ -20,9 +20,17 @@ polarView/   Abandoned native-iOS attempt — superseded, kept for history
 
 ## Status
 
-Backend pipeline fully verified against real data: Polar OAuth (v4 Dynamic
-API), Strava OAuth, activity pull, and heart-rate matching all confirmed
-working end-to-end and deployed on the mini. Frontend UI for the
-Strava-matched activity view hasn't been scoped/built yet — the existing
-`frontend/` views (Today/History/Trend) were built against the earlier
-24/7-heart-rate assumption and predate the pivot to activity-based tracking.
+Full pipeline verified against real data and deployed on the mini: Polar
+OAuth (v4 Dynamic API), Strava OAuth, activity pull, heart-rate matching,
+and the UI itself — three views:
+
+- **Activities** — list of Strava activities, matched HR summary where available
+- **Activity Detail** — the core view: heart rate plotted against the
+  elevation/grade profile on a shared time axis, to see how HR actually
+  responds to climbs vs. descents during a session
+- **Progression** — elevation gain per session vs. average HR over time, to
+  track building up distance/difficulty safely post-ablation
+
+`backend/sync.py` and the daily `heart_rate_daily` rollup (`/api/heart-rate/*`)
+still run too — not part of this UI's navigation, but still the mechanism
+that preserves HR history beyond Polar's ~30-day retention window.

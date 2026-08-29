@@ -141,6 +141,34 @@ def sync_recent_activities(days_back=30):
             start_date_utc=a["start_date"],
             elapsed_time_sec=a["elapsed_time"],
             distance_m=a.get("distance"),
+            elevation_gain_m=a.get("total_elevation_gain"),
         )
 
     return len(activities)
+
+
+def get_streams(strava_id, keys=("time", "distance", "altitude", "grade_smooth")):
+    """Fetch time-series streams for one activity (elevation/grade context —
+    NOT GPS lat/lng, no route/map data is requested here).
+
+    Verified live (2026-08-29) against a real activity: returns a dict keyed
+    by stream name, each with a "data" list aligned by index across streams
+    (same length, same point-for-point order) — NOT wrapped further, and
+    NOT the same shape as the /athlete/activities list response.
+    """
+    access_token = get_valid_access_token()
+    resp = requests.get(
+        f"{config.STRAVA_API_BASE}/activities/{strava_id}/streams",
+        headers={"Authorization": f"Bearer {access_token}"},
+        params={"keys": ",".join(keys), "key_by_type": "true"},
+        timeout=30,
+    )
+    if resp.status_code == 401:
+        raise StravaAuthError(f"Strava rejected the access token (401): {resp.text[:300]}")
+    if resp.status_code == 404:
+        return {}
+    if resp.status_code != 200:
+        raise StravaAPIError(f"streams returned {resp.status_code}: {resp.text[:300]}")
+
+    body = resp.json()
+    return {key: stream.get("data", []) for key, stream in body.items()}

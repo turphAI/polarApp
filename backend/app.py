@@ -18,6 +18,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, redirect, request, session, send_from_directory
 
+import activity_detail as activity_detail_module
 import config
 import db
 import match
@@ -150,6 +151,18 @@ def strava_auth_callback():
 def activities():
     limit = request.args.get("limit", default=50, type=int)
     return jsonify({"activities": db.get_activities(limit)})
+
+
+@_route("GET", "/api/activities/<int:strava_id>/detail")
+def activity_detail(strava_id):
+    try:
+        return jsonify(activity_detail_module.get_activity_series(strava_id))
+    except activity_detail_module.ActivityNotFoundError:
+        return jsonify({"error": "not_found"}), 404
+    except (PolarAuthError, StravaAuthError) as e:
+        return jsonify({"error": str(e)}), 502
+    except (PolarAPIError, StravaAPIError) as e:
+        return jsonify({"error": str(e)}), 502
 
 
 @_route("POST", "/api/strava/sync/now")
