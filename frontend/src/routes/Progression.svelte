@@ -50,11 +50,12 @@
     }
 
     return {
+      // Every activity here always has hr_avg (db.get_activities filters to
+      // matched-only) — no per-bar "was this one matched" distinction needed.
       bars: activities.map((a, i) => ({
         x: PAD + i * ((W - PAD * 2) / n) + BAR_GAP / 2,
         w: barW,
         h: barHeight(a.elevation_gain_m ?? 0),
-        matched: a.hr_avg != null,
       })),
       hrPath: hasHr ? `M ${hrPath}` : '',
       hasHr,
@@ -87,7 +88,7 @@
       <svg viewBox="0 0 {W} {H}" class="chart">
         {#each chart.bars as bar}
           <rect x={bar.x} y={H - PAD - bar.h} width={bar.w} height={bar.h}
-                fill="var(--color-secondary)" opacity={bar.matched ? 0.35 : 0.15} rx="1" />
+                fill="var(--color-secondary)" opacity="0.35" rx="1" />
         {/each}
         {#if chart.hasHr}
           <path d={chart.hrPath} fill="none" stroke="var(--color-accent)" stroke-width="2"

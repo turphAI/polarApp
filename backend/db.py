@@ -254,9 +254,15 @@ def get_unmatched_activities():
         return [dict(r) for r in rows]
 
 
-def get_activities(limit=50):
+def get_activities(limit=50, matched_only=True):
+    """By design (per user, 2026-08-29): a Strava activity with no Polar
+    heart-rate coverage doesn't surface in the app at all — not shown with
+    a placeholder. There's no guarantee every Strava session has a Polar
+    match (predates wearing the watch, watch not synced yet, etc.), so this
+    filter is the normal case, not an edge case."""
     with connect() as conn:
+        where = "WHERE hr_avg IS NOT NULL " if matched_only else ""
         rows = conn.execute(
-            "SELECT * FROM activities ORDER BY start_date_utc DESC LIMIT ?", (limit,)
+            f"SELECT * FROM activities {where}ORDER BY start_date_utc DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
