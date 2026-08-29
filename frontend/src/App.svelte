@@ -8,6 +8,9 @@
 
   let currentTab = $state('activities')
   let selectedActivityId = $state(null)   // set = showing ActivityDetail instead of a tab
+  // Hoisted here (not local to Activities) so it survives a trip into detail
+  // and back — same precedent as the hiking app's NH/ADK range toggle.
+  let sportFilter = $state('All')
 
   let polarStatus = $state(null)   // null while loading
   let stravaStatus = $state(null)
@@ -65,7 +68,7 @@
       {#if selectedActivityId}
         <ActivityDetail stravaId={selectedActivityId} onBack={() => selectedActivityId = null} />
       {:else if currentTab === 'activities'}
-        <Activities onSelect={(id) => selectedActivityId = id} />
+        <Activities onSelect={(id) => selectedActivityId = id} bind:sportFilter />
       {:else if currentTab === 'progression'}
         <Progression />
       {/if}
