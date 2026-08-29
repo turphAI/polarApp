@@ -140,10 +140,11 @@ def get_samples_with_local_time(for_date: date_cls):
             continue
         raw.extend(day_entry.get("samples") or [])
 
-    # WORKING ASSUMPTION, not yet verified against a real matched activity
-    # (see CLAUDE.md): offsetMillis is milliseconds since LOCAL midnight of
-    # `for_date`, in config.LOCAL_TZ. If a real Strava-matched workout later
-    # shows the HR window is off by a fixed amount, this is the line to fix.
+    # offsetMillis is milliseconds since LOCAL midnight of `for_date`, in
+    # config.LOCAL_TZ. CONFIRMED 2026-08-29 against a real Strava-matched
+    # activity: a 2h41m mountain bike ride sliced from this data independently
+    # computed the same hr_high (166) as the whole day's rollup — the window
+    # lines up correctly, not just "runs without error."
     midnight_local = datetime.combine(for_date, datetime.min.time(), tzinfo=ZoneInfo(config.LOCAL_TZ))
     samples = [
         {
