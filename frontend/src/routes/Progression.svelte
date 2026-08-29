@@ -1,6 +1,9 @@
 <script>
   import { onMount } from 'svelte'
+  import ChartComponent from '../lib/components/Chart.svelte'
   import { getActivities } from '../lib/api.js'
+  import { formatDate, formatSportType, metersToFeet } from '../lib/format.js'
+  import { themeColors } from '../lib/theme.js'
 
   // Motor-assisted sport types are excluded from Progression entirely (not
   // just de-emphasized): elevation gain doesn't reflect real cardiac effort
@@ -47,45 +50,57 @@
     nonMotorActivities.filter((a) => a.sport_type === selectedSport).slice().reverse()
   )
 
-  const W = 340
-  const H = 200
-  const PAD = 6
-  const BAR_GAP = 3
-
-  const chart = $derived.by(() => {
+  const chartData = $derived.by(() => {
     if (filtered.length < 2) return null
-
-    const n = filtered.length
-    const barW = (W - PAD * 2) / n - BAR_GAP
-    const xCenter = (i) => PAD + i * ((W - PAD * 2) / n) + ((W - PAD * 2) / n) / 2
-
-    const elevValues = filtered.map((a) => a.elevation_gain_m ?? 0)
-    const maxElev = Math.max(...elevValues, 1)
-    const barHeight = (elev) => (elev / maxElev) * (H - PAD * 2)
-
-    // Every activity here always has hr_avg (db.get_activities filters to
-    // matched-only), so this is really just building the line's points —
-    // the length-check is only for the degenerate n<2 "can't draw a line" case.
-    const hrValues = filtered.map((a) => a.hr_avg)
-    const minHr = Math.min(...hrValues)
-    const maxHr = Math.max(...hrValues)
-    const hrRange = Math.max(maxHr - minHr, 1)
-    const yHr = (hr) => H - PAD - ((hr - minHr) / hrRange) * (H - PAD * 2)
-
+    const c = themeColors()
     return {
-      bars: filtered.map((a, i) => ({
-        x: PAD + i * ((W - PAD * 2) / n) + BAR_GAP / 2,
-        w: barW,
-        h: barHeight(a.elevation_gain_m ?? 0),
-      })),
-      hrPath: `M ${filtered.map((a, i) => `${xCenter(i)},${yHr(a.hr_avg)}`).join(' L ')}`,
-      hrDots: filtered.map((a, i) => ({ x: xCenter(i), y: yHr(a.hr_avg) })),
+      labels: filtered.map((a) => formatDate(a.start_date_utc)),
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Elevation gain (ft)',
+          data: filtered.map((a) => (a.elevation_gain_m != null ? Math.round(metersToFeet(a.elevation_gain_m)) : null)),
+          yAxisID: 'yElev',
+          backgroundColor: c.secondary + '59',   // ~35% opacity
+          order: 2,
+        },
+        {
+          type: 'line',
+          label: 'Avg heart rate (bpm)',
+          data: filtered.map((a) => a.hr_avg),
+          yAxisID: 'yHr',
+          borderColor: c.accent,
+          backgroundColor: c.accent,
+          pointRadius: 3,
+          borderWidth: 2,
+          order: 1,
+        },
+      ],
     }
   })
 
-  function formatDate(iso) {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  }
+  const chartOptions = $derived.by(() => {
+    const c = themeColors()
+    return {
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { ticks: { color: c.muted, font: { size: 12 } }, grid: { display: false } },
+        yHr: {
+          position: 'left',
+          title: { display: true, text: 'Avg HR (bpm)', color: c.accent },
+          ticks: { color: c.accent, font: { size: 12 } },
+          grid: { color: c.border },
+        },
+        yElev: {
+          position: 'right',
+          title: { display: true, text: 'Elevation gain (ft)', color: c.secondary },
+          ticks: { color: c.secondary, font: { size: 12 } },
+          grid: { display: false },
+        },
+      },
+      plugins: { legend: { display: false } },
+    }
+  })
 </script>
 
 <div class="page">
@@ -104,32 +119,18 @@
     {#if sportTypes.length > 1}
       <div class="segmented">
         {#each sportTypes as sport}
-          <button class:active={selectedSport === sport} onclick={() => selectedSport = sport}>{sport}</button>
+          <button class:active={selectedSport === sport} onclick={() => selectedSport = sport}>{formatSportType(sport)}</button>
         {/each}
       </div>
     {/if}
 
     {#if filtered.length < 2}
       <div class="card empty-card">
-        <p>Not enough {selectedSport} sessions yet to show progression — needs at least a couple.</p>
+        <p>Not enough {formatSportType(selectedSport)} sessions yet to show progression — needs at least a couple.</p>
       </div>
-    {:else if chart}
+    {:else if chartData}
       <div class="card chart-card">
-        <svg viewBox="0 0 {W} {H}" class="chart">
-          {#each chart.bars as bar}
-            <rect x={bar.x} y={H - PAD - bar.h} width={bar.w} height={bar.h}
-                  fill="var(--color-secondary)" opacity="0.35" rx="1" />
-          {/each}
-          <path d={chart.hrPath} fill="none" stroke="var(--color-accent)" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round" />
-          {#each chart.hrDots as dot}
-            <circle cx={dot.x} cy={dot.y} r="2.5" fill="var(--color-accent)" />
-          {/each}
-        </svg>
-        <div class="chart-legend">
-          <span class="legend-item"><span class="swatch swatch-elev"></span>Elevation gain</span>
-          <span class="legend-item"><span class="swatch swatch-hr"></span>Avg heart rate</span>
-        </div>
+        <ChartComponent type="bar" data={chartData} options={chartOptions} />
       </div>
 
       <div class="session-list">
@@ -138,7 +139,7 @@
             <span class="session-date">{formatDate(a.start_date_utc)}</span>
             <span class="session-name">{a.name}</span>
             <span class="session-stats">
-              {a.elevation_gain_m != null ? `+${Math.round(a.elevation_gain_m)}m` : '—'}
+              {a.elevation_gain_m != null ? `+${Math.round(metersToFeet(a.elevation_gain_m))} ft` : '—'}
               · <span class="hr">{a.hr_avg} bpm</span>
             </span>
           </div>
@@ -158,7 +159,7 @@
 
   .subtitle {
     color: var(--color-secondary);
-    font-size: 13px;
+    font-size: 14px;
     margin-top: -8px;
   }
 
@@ -177,13 +178,13 @@
 
   .segmented button {
     flex: 1 1 auto;
-    min-height: 36px;
+    min-height: 40px;
     padding: 0 var(--space-3);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     font-family: var(--font);
-    font-size: 13px;
+    font-size: 14px;
     color: var(--color-secondary);
     cursor: pointer;
   }
@@ -195,43 +196,8 @@
   }
 
   .chart-card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .chart {
-    width: 100%;
-    height: auto;
-  }
-
-  .chart-legend {
-    display: flex;
-    justify-content: center;
-    gap: var(--space-4);
-    font-size: 11px;
-    color: var(--color-muted);
-  }
-
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .swatch {
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-  }
-
-  .swatch-elev {
-    background: var(--color-secondary);
-    opacity: 0.35;
-  }
-
-  .swatch-hr {
-    background: var(--color-accent);
+    height: 260px;
+    padding: var(--space-4) var(--space-3);
   }
 
   .session-list {
@@ -250,7 +216,7 @@
     gap: var(--space-2);
     background: var(--color-surface);
     padding: var(--space-2) var(--space-4);
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .session-date {
