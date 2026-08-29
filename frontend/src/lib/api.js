@@ -31,23 +31,35 @@ export function startAuth() {
   window.location.href = api('auth/start')
 }
 
-/** @returns {Promise<{date: string|null, data: object|null, is_today: boolean}>} */
-export function getToday() {
-  return getJson(api('heart-rate/today'))
+/** @returns {Promise<{connected: boolean, athlete_id: string|null, connected_at: number|null}>} */
+export function getStravaAuthStatus() {
+  return getJson(api('strava/status'))
 }
 
-/** @returns {Promise<{days: number, history: object[]}>} */
-export function getHistory(days = 90) {
-  return getJson(api(`heart-rate/history?days=${days}`))
+/** Full-page redirect to start the Strava OAuth dance. */
+export function startStravaAuth() {
+  window.location.href = api('strava/auth/start')
 }
 
-/** @returns {Promise<{status: string, recent_avg: number|null, prior_avg: number|null, delta: number|null}>} */
-export function getTrend() {
-  return getJson(api('heart-rate/trend'))
+/** @returns {Promise<{activities: object[]}>} */
+export function getActivities(limit = 50) {
+  return getJson(api(`activities?limit=${limit}`))
 }
 
-/** Trigger an on-demand sync for today (or a given date). */
-export function syncNow(dateStr) {
-  const q = dateStr ? `?date=${dateStr}` : ''
-  return postJson(api(`sync/now${q}`))
+/**
+ * Merged per-activity series: heart rate matched to Strava's elevation/grade
+ * streams on a shared elapsed-time axis. heart_rate is null on points
+ * outside Polar's data coverage.
+ * @returns {Promise<{name: string, sport_type: string, elapsed_time_sec: number,
+ *   distance_m: number, elevation_gain_m: number|null, hr_high: number|null,
+ *   hr_low: number|null, hr_avg: number|null, has_heart_rate: boolean,
+ *   points: {t_sec: number, altitude_m: number|null, grade_pct: number|null, heart_rate: number|null}[]}>}
+ */
+export function getActivityDetail(stravaId) {
+  return getJson(api(`activities/${stravaId}/detail`))
+}
+
+/** Pull recent Strava activities and attempt HR matching against Polar data. */
+export function syncStravaNow(days = 30) {
+  return postJson(api(`strava/sync/now?days=${days}`))
 }
