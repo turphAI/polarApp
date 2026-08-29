@@ -124,7 +124,10 @@ def get_daily_summary(for_date: date_cls):
         raise PolarAPIError(f"continuous-samples returned {resp.status_code}: {resp.text[:300]}")
 
     body = resp.json()
-    days = (body.get("continuousSamples") or {}).get("heartRateSamplesPerDay") or []
+    # Verified against the real v4 response (2026-08-29): heartRateSamplesPerDay
+    # is top-level, NOT wrapped in a "continuousSamples" envelope — earlier docs
+    # summarized it wrong. See CLAUDE.md "Polar API gotchas".
+    days = body.get("heartRateSamplesPerDay") or []
     all_samples = []
     for day_entry in days:
         if day_entry.get("date") != from_str:
