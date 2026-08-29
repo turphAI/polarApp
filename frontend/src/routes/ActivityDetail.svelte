@@ -1,6 +1,9 @@
 <script>
   import { onMount } from 'svelte'
+  import ChartComponent from '../lib/components/Chart.svelte'
   import { getActivityDetail } from '../lib/api.js'
+  import { formatDuration, formatDistance, formatElevation, formatSportType, metersToFeet } from '../lib/format.js'
+  import { themeColors } from '../lib/theme.js'
 
   /** @type {{ stravaId: number, onBack: () => void }} */
   let { stravaId, onBack } = $props()
@@ -16,74 +19,72 @@
     }
   })
 
-  const W = 340
-  const H = 220
-  const PAD = 6
-
-  // Elevation profile (filled area, background context — "am I going up or
-  // downhill") and heart rate (line, foreground — "how is it responding")
-  // share the same x (elapsed time) but are each normalized independently
-  // to the full chart height. This is a shape comparison, not a shared
-  // value axis — reading an exact elevation off the HR scale (or vice
-  // versa) isn't the point.
-  const chart = $derived.by(() => {
+  // Elevation (filled area, background context — "am I going up or downhill")
+  // and heart rate (line, foreground — "how is it responding") share the
+  // same x (elapsed time) but sit on independent y-axes with real units, so
+  // Chart.js's built-in tooltip reads out real ft/bpm values, not a
+  // normalized shape comparison like the old hand-rolled SVG chart.
+  const chartData = $derived.by(() => {
     if (!detail || !detail.points.length) return null
-    const points = detail.points
-    const maxT = points[points.length - 1].t_sec || 1
+    const c = themeColors()
+    const labels = detail.points.map((p) => (p.t_sec / 60).toFixed(0))
 
-    const x = (t) => PAD + (t / maxT) * (W - PAD * 2)
-
-    const altValues = points.map((p) => p.altitude_m).filter((v) => v != null)
-    const hasAlt = altValues.length > 1
-    let elevationPath = ''
-    if (hasAlt) {
-      const minAlt = Math.min(...altValues)
-      const maxAlt = Math.max(...altValues)
-      const altRange = Math.max(maxAlt - minAlt, 1)
-      const yElev = (alt) => H - PAD - ((alt - minAlt) / altRange) * (H - PAD * 2)
-      const withAlt = points.filter((p) => p.altitude_m != null)
-      const top = withAlt.map((p) => `${x(p.t_sec)},${yElev(p.altitude_m)}`).join(' L ')
-      elevationPath = `M ${top} L ${x(withAlt[withAlt.length - 1].t_sec)},${H - PAD} `
-        + `L ${x(withAlt[0].t_sec)},${H - PAD} Z`
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Elevation (ft)',
+          data: detail.points.map((p) => (p.altitude_m != null ? Math.round(metersToFeet(p.altitude_m)) : null)),
+          yAxisID: 'yElev',
+          borderColor: 'transparent',
+          backgroundColor: c.secondary + '26',   // ~15% opacity
+          fill: 'origin',
+          pointRadius: 0,
+          tension: 0.15,
+          order: 2,
+        },
+        {
+          label: 'Heart rate (bpm)',
+          data: detail.points.map((p) => p.heart_rate),
+          yAxisID: 'yHr',
+          borderColor: c.accent,
+          backgroundColor: c.accent,
+          pointRadius: 0,
+          borderWidth: 2,
+          spanGaps: false,   // a real coverage gap should show as a break, not a fabricated line
+          tension: 0.15,
+          order: 1,
+        },
+      ],
     }
-
-    const hrValues = points.map((p) => p.heart_rate).filter((v) => v != null)
-    const hasHr = hrValues.length > 1
-    let hrPath = ''
-    if (hasHr) {
-      const minHr = Math.min(...hrValues)
-      const maxHr = Math.max(...hrValues)
-      const hrRange = Math.max(maxHr - minHr, 1)
-      const yHr = (hr) => H - PAD - ((hr - minHr) / hrRange) * (H - PAD * 2)
-      // Break the line at gaps (no fabricating data across a coverage gap)
-      // instead of one continuous polyline.
-      let segments = []
-      let current = []
-      for (const p of points) {
-        if (p.heart_rate == null) {
-          if (current.length) segments.push(current)
-          current = []
-          continue
-        }
-        current.push(`${x(p.t_sec)},${yHr(p.heart_rate)}`)
-      }
-      if (current.length) segments.push(current)
-      hrPath = segments.map((seg) => `M ${seg.join(' L ')}`).join(' ')
-    }
-
-    return { elevationPath, hrPath, hasAlt, hasHr, maxT }
   })
 
-  function formatDuration(sec) {
-    const h = Math.floor(sec / 3600)
-    const m = Math.round((sec % 3600) / 60)
-    return h > 0 ? `${h}h ${m}m` : `${m}m`
-  }
-
-  function formatDistance(m) {
-    if (m == null) return '—'
-    return `${(m / 1000).toFixed(1)} km`
-  }
+  const chartOptions = $derived.by(() => {
+    const c = themeColors()
+    return {
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          title: { display: true, text: 'Minutes', color: c.muted },
+          ticks: { color: c.muted, maxTicksLimit: 8, font: { size: 12 } },
+          grid: { color: c.border },
+        },
+        yHr: {
+          position: 'left',
+          title: { display: true, text: 'Heart rate (bpm)', color: c.accent },
+          ticks: { color: c.accent, font: { size: 12 } },
+          grid: { color: c.border },
+        },
+        yElev: {
+          position: 'right',
+          title: { display: true, text: 'Elevation (ft)', color: c.secondary },
+          ticks: { color: c.secondary, font: { size: 12 } },
+          grid: { display: false },
+        },
+      },
+      plugins: { legend: { display: false } },
+    }
+  })
 </script>
 
 <div class="page">
@@ -96,7 +97,7 @@
   {:else}
     <div class="header">
       <h1>{detail.name}</h1>
-      <p class="subtitle">{detail.sport_type} · {formatDuration(detail.elapsed_time_sec)}</p>
+      <p class="subtitle">{formatSportType(detail.sport_type)} · {formatDuration(detail.elapsed_time_sec)}</p>
     </div>
 
     <div class="stats-row">
@@ -106,7 +107,7 @@
       </div>
       <div class="card stat">
         <span class="stat-label">Elevation</span>
-        <span class="stat-value">{detail.elevation_gain_m != null ? `+${Math.round(detail.elevation_gain_m)}m` : '—'}</span>
+        <span class="stat-value">{formatElevation(detail.elevation_gain_m) ?? '—'}</span>
       </div>
       <div class="card stat">
         <span class="stat-label">Avg HR</span>
@@ -118,21 +119,9 @@
       <div class="banner banner-warn">No heart rate data for this session (predates Polar data, or the watch wasn't worn).</div>
     {/if}
 
-    {#if chart}
+    {#if chartData}
       <div class="card chart-card">
-        <svg viewBox="0 0 {W} {H}" class="chart">
-          {#if chart.hasAlt}
-            <path d={chart.elevationPath} fill="var(--color-secondary)" opacity="0.15" />
-          {/if}
-          {#if chart.hasHr}
-            <path d={chart.hrPath} fill="none" stroke="var(--color-accent)" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round" />
-          {/if}
-        </svg>
-        <div class="chart-legend">
-          <span class="legend-item"><span class="swatch swatch-elev"></span>Elevation</span>
-          <span class="legend-item"><span class="swatch swatch-hr"></span>Heart rate</span>
-        </div>
+        <ChartComponent type="line" data={chartData} options={chartOptions} />
       </div>
     {/if}
 
@@ -163,7 +152,7 @@
     border: none;
     color: var(--color-secondary);
     font-family: var(--font);
-    font-size: 14px;
+    font-size: 15px;
     cursor: pointer;
     padding: 0;
   }
@@ -171,12 +160,12 @@
   .muted { color: var(--color-secondary); }
 
   .header h1 {
-    font-size: 20px;
+    font-size: 22px;
   }
 
   .subtitle {
     color: var(--color-secondary);
-    font-size: 13px;
+    font-size: 14px;
     margin-top: 2px;
   }
 
@@ -195,12 +184,12 @@
   }
 
   .stat-label {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--color-secondary);
   }
 
   .stat-value {
-    font-size: 20px;
+    font-size: 21px;
     font-weight: 600;
   }
 
@@ -208,42 +197,7 @@
   .stat-value.low { color: var(--color-good); }
 
   .chart-card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .chart {
-    width: 100%;
-    height: auto;
-  }
-
-  .chart-legend {
-    display: flex;
-    justify-content: center;
-    gap: var(--space-4);
-    font-size: 11px;
-    color: var(--color-muted);
-  }
-
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .swatch {
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-  }
-
-  .swatch-elev {
-    background: var(--color-secondary);
-    opacity: 0.3;
-  }
-
-  .swatch-hr {
-    background: var(--color-accent);
+    height: 280px;
+    padding: var(--space-4) var(--space-3);
   }
 </style>

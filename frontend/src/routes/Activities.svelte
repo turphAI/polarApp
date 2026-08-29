@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte'
   import { getActivities, syncStravaNow } from '../lib/api.js'
+  import { formatDate, formatDistance, formatElevation, formatDuration, formatSportType } from '../lib/format.js'
 
   // sportFilter is hoisted to App.svelte and bound down (bindable), same
   // precedent as the hiking app's NH/ADK range toggle — so it survives a
@@ -45,26 +46,6 @@
   const filteredActivities = $derived(
     activities ? activities.filter((a) => sportFilter === 'All' || a.sport_type === sportFilter) : []
   )
-
-  function formatDate(iso) {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  }
-
-  function formatDistance(m) {
-    if (m == null) return '—'
-    return `${(m / 1000).toFixed(1)} km`
-  }
-
-  function formatElevation(m) {
-    if (m == null) return null
-    return `+${Math.round(m)} m`
-  }
-
-  function formatDuration(sec) {
-    const h = Math.floor(sec / 3600)
-    const m = Math.round((sec % 3600) / 60)
-    return h > 0 ? `${h}h ${m}m` : `${m}m`
-  }
 </script>
 
 <div class="page">
@@ -89,14 +70,16 @@
     {#if sportTypes.length > 2}
       <div class="segmented">
         {#each sportTypes as sport}
-          <button class:active={sportFilter === sport} onclick={() => sportFilter = sport}>{sport}</button>
+          <button class:active={sportFilter === sport} onclick={() => sportFilter = sport}>
+            {sport === 'All' ? 'All' : formatSportType(sport)}
+          </button>
         {/each}
       </div>
     {/if}
 
     {#if filteredActivities.length === 0}
       <div class="card empty-card">
-        <p>No {sportFilter} activities.</p>
+        <p>No {sportFilter === 'All' ? '' : formatSportType(sportFilter) + ' '}activities.</p>
       </div>
     {/if}
 
@@ -106,7 +89,7 @@
           <div class="activity-main">
             <span class="activity-name">{a.name}</span>
             <span class="activity-meta">
-              {formatDate(a.start_date_utc)} · {a.sport_type} · {formatDuration(a.elapsed_time_sec)}
+              {formatDate(a.start_date_utc)} · {formatSportType(a.sport_type)} · {formatDuration(a.elapsed_time_sec)}
               · {formatDistance(a.distance_m)}
               {#if formatElevation(a.elevation_gain_m)} · {formatElevation(a.elevation_gain_m)}{/if}
             </span>
@@ -153,7 +136,7 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     font-family: var(--font);
-    font-size: 13px;
+    font-size: 14px;
     color: var(--color-secondary);
     cursor: pointer;
   }
@@ -169,7 +152,7 @@
     border: none;
     color: var(--color-accent);
     font-family: var(--font);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     cursor: pointer;
   }
@@ -220,14 +203,14 @@
 
   .activity-name {
     font-weight: 600;
-    font-size: 15px;
+    font-size: 16px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .activity-meta {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--color-secondary);
   }
 
@@ -239,18 +222,18 @@
   }
 
   .hr-avg {
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 700;
     color: var(--color-accent);
   }
 
   .hr-unit {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--color-muted);
   }
 
   .no-hr {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--color-muted);
     flex-shrink: 0;
   }
