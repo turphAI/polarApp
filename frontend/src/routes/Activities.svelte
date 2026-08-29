@@ -2,8 +2,11 @@
   import { onMount } from 'svelte'
   import { getActivities, syncStravaNow } from '../lib/api.js'
 
-  /** @type {(stravaId: number) => void} */
-  let { onSelect } = $props()
+  // sportFilter is hoisted to App.svelte and bound down (bindable), same
+  // precedent as the hiking app's NH/ADK range toggle — so it survives a
+  // trip into activity detail and back, instead of resetting.
+  /** @type {{ onSelect: (stravaId: number) => void, sportFilter: string }} */
+  let { onSelect, sportFilter = $bindable('All') } = $props()
 
   let activities = $state(null)   // null = loading
   let error = $state(null)
@@ -32,6 +35,16 @@
   }
 
   onMount(load)
+
+  // Unlike Progression, mixing sport types in a plain list isn't statistically
+  // misleading (each row already labels its own sport) — so "All" is a sensible
+  // default here, unlike Progression's per-sport-only segmented control.
+  const sportTypes = $derived(
+    activities ? ['All', ...[...new Set(activities.map((a) => a.sport_type))].sort()] : []
+  )
+  const filteredActivities = $derived(
+    activities ? activities.filter((a) => sportFilter === 'All' || a.sport_type === sportFilter) : []
+  )
 
   function formatDate(iso) {
     return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -73,8 +86,22 @@
       <p>No activities yet. Tap "Sync now" to pull recent Strava activities.</p>
     </div>
   {:else}
+    {#if sportTypes.length > 2}
+      <div class="segmented">
+        {#each sportTypes as sport}
+          <button class:active={sportFilter === sport} onclick={() => sportFilter = sport}>{sport}</button>
+        {/each}
+      </div>
+    {/if}
+
+    {#if filteredActivities.length === 0}
+      <div class="card empty-card">
+        <p>No {sportFilter} activities.</p>
+      </div>
+    {/if}
+
     <div class="activity-list">
-      {#each activities as a}
+      {#each filteredActivities as a}
         <button class="activity-row" onclick={() => onSelect(a.strava_id)}>
           <div class="activity-main">
             <span class="activity-name">{a.name}</span>
@@ -110,6 +137,31 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
+  }
+
+  .segmented {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .segmented button {
+    flex: 1 1 auto;
+    min-height: 36px;
+    padding: 0 var(--space-3);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--color-secondary);
+    cursor: pointer;
+  }
+
+  .segmented button.active {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    font-weight: 600;
   }
 
   .btn-link {
