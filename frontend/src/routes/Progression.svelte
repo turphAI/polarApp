@@ -2,21 +2,50 @@
   import { onMount } from 'svelte'
   import { getActivities } from '../lib/api.js'
 
-  let activities = $state(null)   // null = loading
+  // Motor-assisted sport types are excluded from Progression entirely (not
+  // just de-emphasized): elevation gain doesn't reflect real cardiac effort
+  // when a motor is helping climb it, so mixing them into an effort-vs-
+  // elevation trend would be actively misleading, not just noisy. They
+  // still show normally in the Activities list — this exclusion is
+  // Progression-specific. See docs/product/progression-methodology.md.
+  const MOTOR_ASSISTED_SPORT_TYPES = new Set(['EBikeRide', 'EMountainBikeRide'])
+
+  let rawActivities = $state(null)   // null = loading
   let error = $state(null)
+  let selectedSport = $state(null)
 
   onMount(async () => {
     try {
       const res = await getActivities(50)
-      // Chronological — oldest first, so the chart reads left-to-right as
-      // "building up over time," matching how the user actually thinks
-      // about progression.
-      activities = res.activities.slice().reverse()
+      rawActivities = res.activities
       error = null
     } catch (e) {
       error = e.message
     }
   })
+
+  // Sport types are mixed by default here on purpose ONLY within this
+  // derivation step — the chart itself always shows a single sport type at
+  // a time (see `filtered` below). Comparing HR response across sport
+  // types (a bike interval effort profile vs. a walk's steady state) would
+  // conflate a real effort-mode difference with an actual trend.
+  const nonMotorActivities = $derived(
+    (rawActivities ?? []).filter((a) => !MOTOR_ASSISTED_SPORT_TYPES.has(a.sport_type))
+  )
+
+  const sportTypes = $derived([...new Set(nonMotorActivities.map((a) => a.sport_type))].sort())
+
+  $effect(() => {
+    if (sportTypes.length && !sportTypes.includes(selectedSport)) {
+      selectedSport = sportTypes[0]
+    }
+  })
+
+  // Chronological — oldest first, so the chart reads left-to-right as
+  // "building up over time," matching how the user actually thinks about it.
+  const filtered = $derived(
+    nonMotorActivities.filter((a) => a.sport_type === selectedSport).slice().reverse()
+  )
 
   const W = 340
   const H = 200
@@ -24,45 +53,33 @@
   const BAR_GAP = 3
 
   const chart = $derived.by(() => {
-    if (!activities || activities.length < 2) return null
+    if (filtered.length < 2) return null
 
-    const n = activities.length
+    const n = filtered.length
     const barW = (W - PAD * 2) / n - BAR_GAP
     const xCenter = (i) => PAD + i * ((W - PAD * 2) / n) + ((W - PAD * 2) / n) / 2
 
-    const elevValues = activities.map((a) => a.elevation_gain_m ?? 0)
+    const elevValues = filtered.map((a) => a.elevation_gain_m ?? 0)
     const maxElev = Math.max(...elevValues, 1)
     const barHeight = (elev) => (elev / maxElev) * (H - PAD * 2)
 
-    const hrActivities = activities
-      .map((a, i) => ({ i, hr: a.hr_avg }))
-      .filter((d) => d.hr != null)
-    const hasHr = hrActivities.length > 1
-    let hrPath = ''
-    let minHr, maxHr
-    if (hasHr) {
-      const hrValues = hrActivities.map((d) => d.hr)
-      minHr = Math.min(...hrValues)
-      maxHr = Math.max(...hrValues)
-      const hrRange = Math.max(maxHr - minHr, 1)
-      const yHr = (hr) => H - PAD - ((hr - minHr) / hrRange) * (H - PAD * 2)
-      hrPath = hrActivities.map((d) => `${xCenter(d.i)},${yHr(d.hr)}`).join(' L ')
-    }
+    // Every activity here always has hr_avg (db.get_activities filters to
+    // matched-only), so this is really just building the line's points —
+    // the length-check is only for the degenerate n<2 "can't draw a line" case.
+    const hrValues = filtered.map((a) => a.hr_avg)
+    const minHr = Math.min(...hrValues)
+    const maxHr = Math.max(...hrValues)
+    const hrRange = Math.max(maxHr - minHr, 1)
+    const yHr = (hr) => H - PAD - ((hr - minHr) / hrRange) * (H - PAD * 2)
 
     return {
-      // Every activity here always has hr_avg (db.get_activities filters to
-      // matched-only) — no per-bar "was this one matched" distinction needed.
-      bars: activities.map((a, i) => ({
+      bars: filtered.map((a, i) => ({
         x: PAD + i * ((W - PAD * 2) / n) + BAR_GAP / 2,
         w: barW,
         h: barHeight(a.elevation_gain_m ?? 0),
       })),
-      hrPath: hasHr ? `M ${hrPath}` : '',
-      hasHr,
-      hrDots: hasHr ? hrActivities.map((d) => {
-        const hrRange = Math.max(maxHr - minHr, 1)
-        return { x: xCenter(d.i), y: H - PAD - ((d.hr - minHr) / hrRange) * (H - PAD * 2) }
-      }) : [],
+      hrPath: `M ${filtered.map((a, i) => `${xCenter(i)},${yHr(a.hr_avg)}`).join(' L ')}`,
+      hrDots: filtered.map((a, i) => ({ x: xCenter(i), y: yHr(a.hr_avg) })),
     }
   })
 
@@ -73,49 +90,61 @@
 
 <div class="page">
   <h1>Progression</h1>
-  <p class="subtitle">Elevation gain per session (bars) vs. average heart rate (line) — building up distance/difficulty over time.</p>
+  <p class="subtitle">Elevation gain per session (bars) vs. average heart rate (line) — one sport at a time, so effort profiles aren't mixed.</p>
 
   {#if error}
     <div class="banner banner-error">{error}</div>
-  {:else if activities === null}
+  {:else if rawActivities === null}
     <p class="muted">Loading…</p>
-  {:else if activities.length < 2}
+  {:else if sportTypes.length === 0}
     <div class="card empty-card">
-      <p>Not enough sessions yet to show progression — needs at least a couple.</p>
+      <p>No matched sessions yet (excluding motor-assisted rides).</p>
     </div>
-  {:else if chart}
-    <div class="card chart-card">
-      <svg viewBox="0 0 {W} {H}" class="chart">
-        {#each chart.bars as bar}
-          <rect x={bar.x} y={H - PAD - bar.h} width={bar.w} height={bar.h}
-                fill="var(--color-secondary)" opacity="0.35" rx="1" />
+  {:else}
+    {#if sportTypes.length > 1}
+      <div class="segmented">
+        {#each sportTypes as sport}
+          <button class:active={selectedSport === sport} onclick={() => selectedSport = sport}>{sport}</button>
         {/each}
-        {#if chart.hasHr}
+      </div>
+    {/if}
+
+    {#if filtered.length < 2}
+      <div class="card empty-card">
+        <p>Not enough {selectedSport} sessions yet to show progression — needs at least a couple.</p>
+      </div>
+    {:else if chart}
+      <div class="card chart-card">
+        <svg viewBox="0 0 {W} {H}" class="chart">
+          {#each chart.bars as bar}
+            <rect x={bar.x} y={H - PAD - bar.h} width={bar.w} height={bar.h}
+                  fill="var(--color-secondary)" opacity="0.35" rx="1" />
+          {/each}
           <path d={chart.hrPath} fill="none" stroke="var(--color-accent)" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round" />
           {#each chart.hrDots as dot}
             <circle cx={dot.x} cy={dot.y} r="2.5" fill="var(--color-accent)" />
           {/each}
-        {/if}
-      </svg>
-      <div class="chart-legend">
-        <span class="legend-item"><span class="swatch swatch-elev"></span>Elevation gain</span>
-        <span class="legend-item"><span class="swatch swatch-hr"></span>Avg heart rate</span>
-      </div>
-    </div>
-
-    <div class="session-list">
-      {#each activities as a}
-        <div class="session-row">
-          <span class="session-date">{formatDate(a.start_date_utc)}</span>
-          <span class="session-name">{a.name}</span>
-          <span class="session-stats">
-            {a.elevation_gain_m != null ? `+${Math.round(a.elevation_gain_m)}m` : '—'}
-            {#if a.hr_avg != null}· <span class="hr">{a.hr_avg} bpm</span>{/if}
-          </span>
+        </svg>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="swatch swatch-elev"></span>Elevation gain</span>
+          <span class="legend-item"><span class="swatch swatch-hr"></span>Avg heart rate</span>
         </div>
-      {/each}
-    </div>
+      </div>
+
+      <div class="session-list">
+        {#each filtered as a}
+          <div class="session-row">
+            <span class="session-date">{formatDate(a.start_date_utc)}</span>
+            <span class="session-name">{a.name}</span>
+            <span class="session-stats">
+              {a.elevation_gain_m != null ? `+${Math.round(a.elevation_gain_m)}m` : '—'}
+              · <span class="hr">{a.hr_avg} bpm</span>
+            </span>
+          </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -138,6 +167,31 @@
   .empty-card {
     color: var(--color-secondary);
     text-align: center;
+  }
+
+  .segmented {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .segmented button {
+    flex: 1 1 auto;
+    min-height: 36px;
+    padding: 0 var(--space-3);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--color-secondary);
+    cursor: pointer;
+  }
+
+  .segmented button.active {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    font-weight: 600;
   }
 
   .chart-card {
